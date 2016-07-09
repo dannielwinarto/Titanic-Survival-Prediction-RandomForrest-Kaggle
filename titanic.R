@@ -115,6 +115,37 @@ full %>% filter(!is.na(Fare), Pclass == 3, Age >= 50, Embarked == "S" ) %>% summ
 full$Fare[1044] = 8.43042
 
 
+# investigating the age distribution
+
+table(full$Age)
+
+ggplot(full[!is.na(full$Age),], aes(x = Age )) +
+  geom_histogram() + 
+  facet_grid(~Sex) +
+  scale_y_continuous(breaks = seq(0,80,5)) +
+  scale_x_continuous(breaks = seq(0,90,10)) +
+  ggtitle("Age Dsitribution of Passenger")
+
+ggplot(full[!is.na(full$Age),], aes(x = Age, fill = as.factor(Sex))) +
+  geom_histogram(position = "identity", alpha = .4) +
+  scale_fill_manual(values=c("green", "purple")) +
+  scale_y_continuous(breaks = seq(0,80,5))+
+  scale_x_continuous(breaks = seq(0,90,5)) +
+  ggtitle("Age Dsitribution of Passenger") +
+  labs(fill="")
+
+
+medians = aggregate(Age ~  Sex, full, median)
+
+ggplot(full[!is.na(full$Age),], aes(x = Sex, y = Age)) +
+  geom_boxplot() +
+  scale_y_continuous(breaks = seq(0,80,5)) +
+  geom_text( data = medians, aes( label = Age, y = Age), vjust = -.5)
+  
+full$Age[full$Sex == "female" & is.na(full$Age)] = 27
+full$Age[full$Sex == "male" & is.na(full$Age)] = 28
+
+  
 # column age contains a lot of missing values (263 records), so we would like to analyze based on honorifics system on their name, 
 # and ultimately group it into adult male, adult female, young male, young female
 
@@ -294,17 +325,23 @@ full$GenderAgeClass = as.factor(full$GenderAgeClass)
 train = full[!is.na(full$Survived),]
 test = full[is.na(full$Survived),]
 
-titanic.rf = randomForest(factor(Survived) ~ Pclass + Sex + SibSp  + Parch + Fare + Embarked + honorific + GenderAgeClass + FareClass,
+titanic.rf = randomForest(factor(Survived) ~ Pclass + Sex + SibSp  + Parch + Fare + Embarked + honorific + GenderAgeClass + FareClass + Age ,
                           data = train)
 
 plot(titanic.rf, ylim=c(0,0.36))
 legend('topright', colnames(titanic.rf$err.rate), col=1:3, fill=1:3)
 
 prediction <- predict(titanic.rf, test)
+submission = data.frame(PassengerId = test$PassengerId, Survived = prediction)
+write.csv(submission, "submission.csv", row.names = FALSE)
+
 table(prediction,genderclassmodel[,2])
 
 mean(prediction != genderclassmodel$Survived)
 
 importance(titanic.rf)
+
+names(full)
+
 
 
