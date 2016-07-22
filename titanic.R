@@ -43,6 +43,7 @@ setwd("C:/Users/dan_9/Desktop/COURSERA + SELF STUDY/Kaggle/Titanic")
 library(dplyr)
 library(ggplot2)
 library(gridExtra)
+library(rpart) # grow classification tree
 library(randomForest)
 library(stringr) 
 library(missForest) # imputation
@@ -142,6 +143,7 @@ plotAgeRaw3
 full$honorific = str_extract(full$Name, pattern = "\\,[ ][A-z]*[ ]*[A-z]*\\.")
 full$honorific = gsub(", ","",full$honorific)
 
+full$honorific = as.factor(full$honorific)
 table(full$honorific)
 
 # then we need to find the age range of each honorific
@@ -170,6 +172,7 @@ full$GenderAgeClass[full$honorific ==  "Mr." |  full$honorific ==  "Dr."| full$h
 
 full$GenderAgeClass[full$honorific ==  "Master."] = "Young Male"
 
+full$GenderAgeClass = as.factor(full$GenderAgeClass)
 
 SurvivalRateByGenderAge = full %>%
   filter(Survived != "NA") %>%
@@ -308,6 +311,7 @@ ggplot(SurvivalRateSibSp, aes(x = SibSp, y = survivalRate)) +
 
 ######################################################################
 # PART 2 - IMPUTATION OF MISSING VALUES USING MULTIPLE ALGORITHM (MEDIAN, MISSFORREST, AND MICE)
+# We ended up using missforrest algorithm, which yield us the best score among three
 ######################################################################
 
 
@@ -319,42 +323,45 @@ ggplot(SurvivalRateSibSp, aes(x = SibSp, y = survivalRate)) +
 # 1st approach we predict the missing Age using median by gender/sex 
 # this approach yield to the best score we can achieve so far 
 
-medians = aggregate(Age ~  Sex, full, median)
-medians
+# medians = aggregate(Age ~  Sex, full, median)
+# medians
 
-full$Age[is.na(full$Age) & full$Sex == "female"] = 27
-full$Age[is.na(full$Age) & full$Sex == "male"] = 28
+# full$Age[is.na(full$Age) & full$Sex == "female"] = 27
+# full$Age[is.na(full$Age) & full$Sex == "male"] = 28
 
 # 2nd approach we predict the missing Age using missForrest Package, which predict missing values using random forrest 
 # eliminating columns: PassengerId,Survived,Name,Parch, Ticket,Cabin, because Age should not be correlated to these columns
-#
-# temp = full[-c(1,2,4,8,9,11)]
-# set.seed(100)
-# Age.rf = missForest(temp)
-# full$Age = Age.rf$ximp$Age
-#
-# plotAge.rf1 = ggplot(full[!is.na(full$Age),], aes(x = Age )) +
-#   geom_histogram() + 
-#   facet_grid(~Sex) +
-#   coord_cartesian(ylim =  seq(0,150,5))+
-#   scale_y_continuous(breaks = seq(0,150,5)) +
-#   scale_x_continuous(breaks = seq(0,90,10)) +
-#   ggtitle("Age Dsitribution of Passenger by Gender\n MISSFORREST")
-# 
-# plotAge.rf2 = ggplot(full[!is.na(full$Age),], aes(x = Age, fill = as.factor(Sex))) +
-#   geom_histogram(position = "identity", alpha = .4) +
-#   scale_fill_manual(values=c("green", "purple")) +
-#   scale_y_continuous(breaks = seq(0,150,5))+
-#   scale_x_continuous(breaks = seq(0,90,10)) +
-#   ggtitle("Age Dsitribution of Passenger by Gender\n MISSFORREST") +
-#   labs(fill="")
-# 
-# grid.arrange(plotAgeRaw2, plotAge.rf2 , ncol=2)
-# grid.arrange(plotAgeRaw1, plotAge.rf1 , ncol=2)
+
+temp = full[-c(1,2,4,8,9,11,16)]
+head(temp)
+set.seed(100)
+Age.rf = missForest(temp)
+full$Age = Age.rf$ximp$Age
+summary(temp)
+
+plotAge.rf1 = ggplot(full[!is.na(full$Age),], aes(x = Age )) +
+  geom_histogram() +
+  facet_grid(~Sex) +
+  coord_cartesian(ylim =  seq(0,150,5))+
+  scale_y_continuous(breaks = seq(0,150,5)) +
+  scale_x_continuous(breaks = seq(0,90,10)) +
+  ggtitle("Age Dsitribution of Passenger by Gender\n MISSFORREST")
+
+plotAge.rf2 = ggplot(full[!is.na(full$Age),], aes(x = Age, fill = as.factor(Sex))) +
+  geom_histogram(position = "identity", alpha = .4) +
+  scale_fill_manual(values=c("green", "purple")) +
+  scale_y_continuous(breaks = seq(0,150,5))+
+  scale_x_continuous(breaks = seq(0,90,10)) +
+  ggtitle("Age Dsitribution of Passenger by Gender\n MISSFORREST") +
+  labs(fill="")
+
+grid.arrange(plotAgeRaw2, plotAge.rf2 , ncol=2)
+grid.arrange(plotAgeRaw1, plotAge.rf1 , ncol=2)
 
 # 3rd approach we predict the missing Age using MICE Package, this time we will use "pmm" method, (predictive mean matching)
 # eliminating columns: PassengerId,Survived,Name,Parch, Ticket,Cabin, because Age should not be correlated to these columns
-# temp2 = full[-c(1,2,4,9,11)]
+# temp2 = full[-c(1,2,4,9,11,16)]
+# head(temp2)
 # set.seed(100)
 # micePmm = mice(temp2 , method = "norm")
 # # micePmm$imp$Age$`3`
@@ -392,18 +399,23 @@ full$Age[is.na(full$Age) & full$Sex == "male"] = 28
 # grid.arrange(plotAgeRaw3, plotAge.mice3 , ncol=2)
 
 
-full$honorific = as.factor(full$honorific)
-full$GenderAgeClass = as.factor(full$GenderAgeClass)
-
 train = full[!is.na(full$Survived),]
 test = full[is.na(full$Survived),]
 
 summary(train)
 summary(test)
 
+# we need to tune our random forrest, we need to find the best number of variables "mtry"
+set.seed(100)
+tuneRF(x = train[,c(3,5,7,8,10,12,13,14,15,6)], 
+       y = train[,2],
+       stepFactor=1.5, 
+       improve=1e-5)
+
 set.seed(100)
 titanic.rf = randomForest(factor(Survived) ~ Pclass + Sex + SibSp  + Parch + Fare + Embarked + honorific + GenderAgeClass + FareClass + Age ,
-                          data = train)
+                          data = train,
+                          mtry = 2)
 
 plot(titanic.rf, ylim=c(0,0.36))
 legend('topright', colnames(titanic.rf$err.rate), col=1:3, fill=1:3)
@@ -416,5 +428,29 @@ importance(titanic.rf)
 
 
 
+######################################################################
+# END
+######################################################################
 
 
+
+
+
+
+
+
+
+######################################################################
+# Experiment using Trees - rpart package
+######################################################################
+
+# library(rpart)
+# set.seed(100)
+# titanic.rp = rpart(factor(Survived) ~ Pclass + Sex + SibSp  + Parch + Fare + Embarked + honorific + GenderAgeClass + FareClass + Age ,
+#                           data = train)
+# 
+# plot(titanic.rp, uniform =TRUE)
+# text(titanic.rp, use.n = TRUE, all = TRUE) 
+# prediction = predict(titanic.rp, test, type = "class")
+# submission = data.frame(PassengerId = test$PassengerId, Survived = prediction)
+# write.csv(submission, "submission.csv", row.names = FALSE)
